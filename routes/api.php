@@ -6,7 +6,7 @@ use App\Http\Controllers\Api\MessageApiController;
 use App\Http\Controllers\Api\PrivateConversationController;
 use App\Http\Controllers\Api\PrivateMessageController;
 use App\Http\Controllers\Api\RoomApiController;
-use App\Http\Controllers\Api\WebSocketAuthController;
+use App\Http\Controllers\Api\WebSocketsAuthController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->name('api.')->group(function () {
@@ -52,9 +52,9 @@ Route::prefix('v1')->name('api.')->middleware(['auth:api'])->group(function () {
 
 // Endpoints auxiliares
 Route::prefix('v1')->middleware(['auth:api'])->group(function () {
-    Route::post('/websocket/auth', [WebSocketAuthController::class, 'authenticate']);
-    Route::get('/websocket/channels', [WebSocketAuthController::class, 'channels']);
-    Route::get('/websocket/test', [WebSocketAuthController::class, 'test']);
+    Route::post('/websocket/auth', [WebSocketsAuthController::class, 'authenticate']);
+    Route::get('/websocket/channels', [WebSocketsAuthController::class, 'channels']);
+    Route::get('/websocket/test', [WebSocketsAuthController::class, 'test']);
 });
 
 Route::get('/v1/status', function () {

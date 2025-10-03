@@ -13,7 +13,7 @@ use App\Models\Room;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
-class WebSocketAuthController extends Controller
+class WebSocketsAuthController extends Controller
 {
     /**
      * Autentica usuário para canais privados do WebSocket

@@ -41,7 +41,7 @@ class ChatAutoLoginController extends Controller {
             );
 
             // JWT token
-            $token = auth('api')->login($user);
+            $token = auth('api')->setTTL(0)->login($user);
 
             // Slug determinístico por account_id
             $slug = 'sala-' . (string)$accountId;
