@@ -8,6 +8,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
 class RoomApiController extends Controller {
+    /**
+     * Lista salas visíveis ao usuário (públicas + privadas que ele participa).
+     */
     public function index(Request $request) {
         $user = $request->user();
 
@@ -16,6 +19,7 @@ class RoomApiController extends Controller {
 
         if ($user) {
             $userId = $user->id;
+
             $query->where(function ($q) use ($userId) {
                 $q->where('is_private', false)
                     ->orWhere('created_by', $userId)
@@ -40,8 +44,12 @@ class RoomApiController extends Controller {
         ]);
     }
 
+    /**
+     * Exibe detalhes de uma sala específica.
+     */
     public function show(Request $request, Room $room) {
         $userId = (int)optional($request->user())->id;
+
         if (!$room->userCanAccess($userId)) {
             return response()->json([
                 'error' => 'Acesso negado',
@@ -55,6 +63,9 @@ class RoomApiController extends Controller {
         return response()->json(['data' => $room]);
     }
 
+    /**
+     * Cria uma nova sala.
+     */
     public function store(Request $request) {
         $request->validate([
             'name' => 'required|string|max:255',
@@ -72,9 +83,7 @@ class RoomApiController extends Controller {
             'created_by' => $userId,
         ]);
 
-        // Garante criador na pivot com joined_at
-        $room->users()->syncWithoutDetaching([$userId => ['joined_at' => now()]]);
-
+        // O boot() do model já garante o attach do criador
         $room->load(['creator:id,name', 'users:id,name']);
 
         return response()->json([
@@ -83,6 +92,9 @@ class RoomApiController extends Controller {
         ], 201);
     }
 
+    /**
+     * Atualiza uma sala.
+     */
     public function update(Request $request, Room $room) {
         if ((int)$room->created_by !== (int)$request->user()->id) {
             return response()->json([
@@ -107,6 +119,9 @@ class RoomApiController extends Controller {
         ]);
     }
 
+    /**
+     * Exclui uma sala.
+     */
     public function destroy(Request $request, Room $room) {
         if ((int)$room->created_by !== (int)$request->user()->id) {
             return response()->json([
@@ -120,6 +135,9 @@ class RoomApiController extends Controller {
         return response()->json(['message' => 'Sala deletada com sucesso.']);
     }
 
+    /**
+     * Usuário entra em uma sala.
+     */
     public function join(Request $request, Room $room) {
         $userId = $request->user()->id;
 
@@ -144,41 +162,47 @@ class RoomApiController extends Controller {
         ]);
     }
 
+    /**
+     * Adiciona membro a uma sala privada (apenas o criador pode).
+     */
     public function addMember(Request $request, Room $room) {
-        // Apenas o criador pode adicionar
         if ((int)$room->created_by !== (int)$request->user()->id) {
             return response()->json([
                 'error' => 'Acesso negado',
-                'message' => 'Apenas o criador pode adicionar membros.'
+                'message' => 'Apenas o criador pode adicionar membros.',
             ], 403);
         }
 
         $data = $request->validate([
-            'user_id' => 'required|integer|exists:users,id'
+            'user_id' => 'required|integer|exists:users,id',
         ]);
 
         if ($room->users()->where('user_id', $data['user_id'])->exists()) {
             return response()->json([
-                'message' => 'Usuário já é membro da sala.'
+                'message' => 'Usuário já é membro da sala.',
             ], 200);
         }
 
         $room->users()->attach($data['user_id'], ['joined_at' => now()]);
 
         return response()->json([
-            'message' => 'Membro adicionado com sucesso.'
+            'message' => 'Membro adicionado com sucesso.',
         ], 201);
     }
 
+    /**
+     * Usuário sai de uma sala.
+     */
     public function leave(Request $request, Room $room) {
         $userId = $request->user()->id;
-
-        // Se quiser evitar que o criador saia, bloqueie aqui
         $room->users()->detach($userId);
 
         return response()->json(['message' => 'Você saiu da sala com sucesso.']);
     }
 
+    /**
+     * Lista os membros de uma sala.
+     */
     public function members(Request $request, Room $room) {
         $userId = (int)optional($request->user())->id;
 
@@ -204,6 +228,9 @@ class RoomApiController extends Controller {
         ]);
     }
 
+    /**
+     * Lista todas as salas privadas em que o usuário participa ou criou.
+     */
     public function myPrivateRooms(Request $request) {
         $userId = $request->user()->id;
 

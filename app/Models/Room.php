@@ -8,8 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Room extends Model
-{
+class Room extends Model {
     use HasFactory;
 
     protected $fillable = [
@@ -24,40 +23,64 @@ class Room extends Model
         'is_private' => 'boolean',
     ];
 
-    public function creator(): BelongsTo
-    {
+    /**
+     * Criador da sala.
+     */
+    public function creator(): BelongsTo {
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    public function users(): BelongsToMany
-    {
+    /**
+     * Usuários membros da sala.
+     */
+    public function users(): BelongsToMany {
         return $this->belongsToMany(User::class)
             ->withPivot('joined_at')
             ->withTimestamps();
     }
 
-    public function messages(): HasMany
-    {
+    /**
+     * Mensagens da sala.
+     */
+    public function messages(): HasMany {
         return $this->hasMany(Message::class);
     }
 
-    public function latestMessages(): HasMany
-    {
+    /**
+     * Últimas mensagens (limite 50).
+     */
+    public function latestMessages(): HasMany {
         return $this->hasMany(Message::class)
             ->with('user')
             ->latest()
             ->limit(50);
     }
 
-    public function getRouteKeyName(): string
-    {
+    /**
+     * Usa o slug na rota.
+     */
+    public function getRouteKeyName(): string {
         return 'slug';
     }
 
-    public function userCanAccess(int $userId): bool
-    {
-        if (! $this->is_private) return true;
-        if ((int) $this->created_by === $userId) return true;
+    /**
+     * Verifica se o usuário pode acessar a sala.
+     */
+    public function userCanAccess(int $userId): bool {
+        if (!$this->is_private) return true;
+        if ((int)$this->created_by === $userId) return true;
+
         return $this->users()->where('user_id', $userId)->exists();
+    }
+
+    /**
+     * Garante que o criador seja sempre membro da sala após a criação.
+     */
+    protected static function booted(): void {
+        static::created(function (self $room) {
+            if ($room->created_by && !$room->users()->where('user_id', $room->created_by)->exists()) {
+                $room->users()->attach($room->created_by, ['joined_at' => now()]);
+            }
+        });
     }
 }
