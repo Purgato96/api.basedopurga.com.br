@@ -23,7 +23,6 @@ class AuthController extends Controller {
      * Login e criação de token JWT
      */
     public function login(Request $request) {
-        dd('Hora do Servidor:', now());
         $credentials = $request->only('email', 'password');
 
         if (!$token = JWTAuth::attempt($credentials)) {
