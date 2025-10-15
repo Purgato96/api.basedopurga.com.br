@@ -15,7 +15,7 @@ Route::prefix('v1')->name('api.')->group(function () {
     Route::post('/auth/register', [AuthController::class, 'register']);
     Route::post('/auth/auto-login', [ChatAutoLoginController::class, 'autoLogin']);
 
-    Route::get('/v1/time-test', function () {
+    Route::get('/time-test', function () {
         return response()->json([
             'server_time' => now()->toIso8601String(),
             'server_timezone' => config('app.timezone'),
