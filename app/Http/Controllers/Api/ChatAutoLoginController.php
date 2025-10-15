@@ -42,7 +42,7 @@ class ChatAutoLoginController extends Controller {
             );
 
             // Cria token JWT sem expiração
-            $token = auth('api')->setTTL(0)->login($user);
+            $token = auth('api')->login($user);
 
             // Slug da sala baseado no account_id
             $slug = 'sala-' . Str::slug((string)$accountId);
