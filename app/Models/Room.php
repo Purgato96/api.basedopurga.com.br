@@ -48,12 +48,6 @@ class Room extends Model {
         return 'slug';
     }
 
-    public function userCanAccess(int $userId): bool {
-        if (!$this->is_private) return true;
-        if ((int)$this->created_by === $userId) return true;
-        return $this->users()->where('user_id', $userId)->exists();
-    }
-
     /**
      * Garante que o criador e o usuário atual estão dentro da sala.
      */

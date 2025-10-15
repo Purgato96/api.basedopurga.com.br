@@ -6,23 +6,51 @@ use Illuminate\Database\Seeder;
 use Spatie\Permission\Models\Role;
 use Spatie\Permission\Models\Permission;
 
-class RolesAndPermissionsSeeder extends Seeder
-{
-    public function run()
-    {
-        // Limpa cache de permissões (importante)
+class RolesAndPermissionsSeeder extends Seeder {
+    public function run() {
+        // Limpa cache de permissões
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
-        // Cria permissões
-        Permission::create(['name' => 'edit messages']);
-        Permission::create(['name' => 'delete messages']);
-        Permission::create(['name' => 'create rooms']);
+        // --- Permissões de Usuário ---
+        $permUser = [
+            'send-messages',
+            'create-rooms',
+            'leave-room',
+        ];
 
-        // Cria papéis e atribui permissões
-        $roleAdmin = Role::create(['name' => 'admin']);
-        $roleAdmin->givePermissionTo(Permission::all());
+        // --- Permissões de Manager (Moderador) ---
+        $permManager = [
+            'delete-any-message',
+        ];
 
-        $roleUser = Role::create(['name' => 'user']);
-        $roleUser->givePermissionTo('create rooms');  // Exemplo de permissão básica para usuário comum
+        // --- Permissões de Admin ---
+        $permAdmin = [
+            'edit-any-message',
+            'delete-any-room',
+            'add-member-room',
+        ];
+
+        // Cria todas as permissões de uma vez
+        foreach (array_merge($permUser, $permManager, $permAdmin) as $permission) {
+            Permission::firstOrCreate(['name' => $permission]);
+        }
+
+        // --- Cria Papéis e Atribui Permissões ---
+
+        // User: Permissões básicas
+        Role::firstOrCreate(['name' => 'user'])
+            ->syncPermissions($permUser);
+
+        // Manager: Tudo que um User faz + permissões de Manager
+        Role::firstOrCreate(['name' => 'manager'])
+            ->syncPermissions(array_merge($permUser, $permManager));
+
+        // Admin: Tudo que um Manager faz + permissões de Admin
+        Role::firstOrCreate(['name' => 'admin'])
+            ->syncPermissions(array_merge($permUser, $permManager, $permAdmin));
+
+        // Master: Pode tudo
+        Role::firstOrCreate(['name' => 'master'])
+            ->syncPermissions(Permission::all());
     }
 }
