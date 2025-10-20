@@ -13,6 +13,7 @@ class RolesAndPermissionsSeeder extends Seeder {
 
         // --- Permissões de Usuário ---
         $permUser = [
+            'view',
             'send-messages',
             'create-rooms',
             'leave-room',
