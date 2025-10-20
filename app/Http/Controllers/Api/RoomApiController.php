@@ -6,11 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\Room;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 
 /**
  * @mixin \Illuminate\Foundation\Auth\Access\AuthorizesRequests
  */
 class RoomApiController extends Controller {
+    use AuthorizesRequests;
     public function index(Request $request) {
         $user = $request->user();
         $todasAsSalas = Room::withCount('users')->get();
