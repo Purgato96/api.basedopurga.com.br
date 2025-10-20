@@ -13,13 +13,19 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
  */
 class RoomApiController extends Controller {
     use AuthorizesRequests;
+
     public function index(Request $request) {
-        $user = $request->user();
+        $user = $request->user(); // $user pode ser null aqui
         $todasAsSalas = Room::withCount('users')->get();
-        // Filtra a lista USANDO A POLICY
         $salasPermitidas = $todasAsSalas->filter(function ($sala) use ($user) {
-            // Pergunta à RoomPolicy: "Este usuário pode 'ver' esta sala?"
-            return $user->can('view', $sala);
+            // 👇 SUA LÓGICA ESTAVA CORRETA!
+            if ($user) {
+                // 1. Se TEM um usuário logado, pergunte à Policy
+                return $user->can('view', $sala);
+            } else {
+                // 2. Se NÃO tem usuário (visitante), só mostre salas públicas
+                return !$sala->is_private;
+            }
         });
         return response()->json(['data' => $salasPermitidas->values()]);
     }
