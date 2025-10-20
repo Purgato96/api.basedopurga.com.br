@@ -31,7 +31,7 @@ class RoomApiController extends Controller {
     }
 
     public function store(Request $request) {
-        $this->authorize('create', Room::class);
+        $this->authorize('create-rooms', Room::class);
         $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string|max:1000',

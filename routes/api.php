@@ -14,14 +14,6 @@ Route::prefix('v1')->name('api.')->group(function () {
     Route::post('/auth/login', [AuthController::class, 'login']);
     Route::post('/auth/register', [AuthController::class, 'register']);
     Route::post('/auth/auto-login', [ChatAutoLoginController::class, 'autoLogin']);
-
-    Route::get('/time-test', function () {
-        return response()->json([
-            'server_time' => now()->toIso8601String(),
-            'server_timezone' => config('app.timezone'),
-        ]);
-    });
-
     Route::get('/rooms', [RoomApiController::class, 'index']);
     Route::get('/rooms/{room:slug}', [RoomApiController::class, 'show']);
     Route::get('/rooms/{room:slug}/members', [RoomApiController::class, 'members']);
