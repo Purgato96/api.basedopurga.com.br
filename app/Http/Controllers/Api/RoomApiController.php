@@ -13,35 +13,13 @@ use Illuminate\Support\Str;
 class RoomApiController extends Controller {
     public function index(Request $request) {
         $user = $request->user();
-
-        $query = Room::with(['creator:id,name', 'users:id,name'])
-            ->withCount('users', 'messages');
-
-        if ($user) {
-            $userId = $user->id;
-
-            $query->where(function ($q) use ($userId) {
-                $q->where('is_private', false)
-                    ->orWhere('created_by', $userId)
-                    ->orWhereHas('users', function ($uq) use ($userId) {
-                        $uq->where('user_id', $userId);
-                    });
-            });
-        } else {
-            $query->where('is_private', false);
-        }
-
-        $rooms = $query->latest()->paginate(20);
-
-        return response()->json([
-            'data' => $rooms->items(),
-            'meta' => [
-                'current_page' => $rooms->currentPage(),
-                'last_page' => $rooms->lastPage(),
-                'per_page' => $rooms->perPage(),
-                'total' => $rooms->total(),
-            ],
-        ]);
+        $todasAsSalas = Room::withCount('users')->get();
+        // Filtra a lista USANDO A POLICY
+        $salasPermitidas = $todasAsSalas->filter(function ($sala) use ($user) {
+            // Pergunta à RoomPolicy: "Este usuário pode 'ver' esta sala?"
+            return $user->can('view', $sala);
+        });
+        return response()->json(['data' => $salasPermitidas->values()]);
     }
 
     public function show(Request $request, Room $room) {
@@ -154,6 +132,7 @@ class RoomApiController extends Controller {
 
         return response()->json(['message' => 'Você saiu da sala com sucesso.']);
     }
+
     public function members(Request $request, Room $room) {
 
         $this->authorize('view', $room);
