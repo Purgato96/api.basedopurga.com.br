@@ -82,7 +82,19 @@ class AuthController extends Controller {
     public function me(Request $request) {
         try {
             $user = JWTAuth::parseToken()->authenticate();
-            return response()->json($user);
+
+            // ✅ CARREGA AS PERMISSÕES ANTES DE ENVIAR
+            $user->load('roles', 'permissions');
+            $permissions = $user->getAllPermissions()->pluck('name');
+
+            // Retorna o usuário com a lista de permissões
+            return response()->json([
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'permissions' => $permissions, // 👈 ANEXA AS PERMISSÕES
+            ]);
+
         } catch (TokenExpiredException $e) {
             return response()->json(['error' => 'Token expirado'], 401);
         } catch (TokenInvalidException $e) {
@@ -98,11 +110,21 @@ class AuthController extends Controller {
     public function refresh() {
         try {
             $newToken = JWTAuth::refresh();
-            return response()->json([
+            $ttl = config('jwt.ttl'); // Pega o TTL (pode ser null)
+
+            // Prepara a resposta base
+            $responseData = [
                 'access_token' => $newToken,
                 'token_type' => 'bearer',
-                'expires_in' => config('jwt.ttl') * 60,
-            ]);
+            ];
+
+            // Só adiciona 'expires_in' se ele tiver um valor (não for null)
+            if ($ttl) {
+                $responseData['expires_in'] = $ttl * 60; // Converte minutos para segundos
+            }
+
+            return response()->json($responseData);
+
         } catch (TokenExpiredException $e) {
             return response()->json(['error' => 'Token expirou, faça login novamente'], 401);
         } catch (TokenInvalidException $e) {
