@@ -29,11 +29,33 @@ class AuthController extends Controller {
             return response()->json(['error' => 'Credenciais inválidas'], 401);
         }
 
-        return response()->json([
+        // ✅ BUSCA O USUÁRIO LOGADO
+        $user = auth()->user();
+
+        // ✅ CARREGA AS PERMISSÕES
+        $user->load('roles', 'permissions'); // Opcional carregar roles se precisar
+        $permissions = $user->getAllPermissions()->pluck('name');
+
+        $ttl = config('jwt.ttl'); // Pega o TTL (pode ser null)
+
+        // Prepara a resposta base
+        $responseData = [
             'access_token' => $token,
             'token_type' => 'bearer',
-            'expires_in' => config('jwt.ttl') * 60,
-        ]);
+            // ✅ INCLUI OS DADOS DO USUÁRIO
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'permissions' => $permissions, // 👈 ENVIA AS PERMISSÕES
+            ]
+        ];
+        // Só adiciona 'expires_in' se ele tiver um valor (não for null)
+        if ($ttl !== null) { // Checa explicitamente por null
+            $responseData['expires_in'] = $ttl * 60; // Converte minutos para segundos
+        }
+        // RETORNA TUDO
+        return response()->json($responseData);
     }
 
     /**
