@@ -14,19 +14,28 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 class RoomApiController extends Controller {
     use AuthorizesRequests;
 
-    public function index(Request $request) {
-        $user = $request->user(); // $user pode ser null aqui
-        $todasAsSalas = Room::withCount('users')->get();
+    public function index(Request $request)
+    {
+        $user = $request->user();
+
+        // 👇 CARREGUE A RELAÇÃO 'users' AQUI 👇
+        $todasAsSalas = Room::with('users') // <--- ADICIONE ISSO
+        ->withCount('users')
+            ->get();
+
+        // O filtro agora funciona sem N+1 Queries
         $salasPermitidas = $todasAsSalas->filter(function ($sala) use ($user) {
-            // 👇 SUA LÓGICA ESTAVA CORRETA!
             if ($user) {
-                // 1. Se TEM um usuário logado, pergunte à Policy
                 return $user->can('view', $sala);
             } else {
-                // 2. Se NÃO tem usuário (visitante), só mostre salas públicas
                 return !$sala->is_private;
             }
         });
+
+        // ✅ Opcional: Carregar creator só para as salas permitidas (mais eficiente)
+        $salasPermitidas->load('creator:id,name');
+
+        // Retorna a lista filtrada (values() reseta as chaves do array)
         return response()->json(['data' => $salasPermitidas->values()]);
     }
 
