@@ -14,29 +14,30 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 class RoomApiController extends Controller {
     use AuthorizesRequests;
 
-    public function index(Request $request)
-    {
+    public function index(Request $request) {
         $user = $request->user();
-
-        // Cria a query base
         $query = Room::query();
 
-        // Se o usuário está logado, aplica o filtro de acesso
         if ($user) {
             $userId = $user->id;
             $query->where(function ($q) use ($userId) {
-                // Mostra salas públicas OU
                 $q->where('is_private', false)
-                    // salas que o usuário criou OU
                     ->orWhere('created_by', $userId)
-                    // salas das quais o usuário é membro (vai direto na tabela room_user)
                     ->orWhereHas('users', function ($uq) use ($userId) {
                         $uq->where('user_id', $userId);
                     });
             });
-        }
-        // Se não está logado (visitante), só mostra as públicas
-        else {
+
+            // 👇 ADICIONE ESTAS LINHAS PARA DEBUG 👇
+            \Log::info("User ID: " . $userId); // Loga o ID do usuário
+            \Log::info("SQL Gerada: " . $query->toSql()); // Loga a SQL
+            \Log::info("Bindings: ", $query->getBindings()); // Loga os valores usados na SQL
+            //
+            // Você também pode usar dd() aqui se estiver testando com Postman:
+            // dd($query->toSql(), $query->getBindings());
+            // 👆 FIM DO DEBUG 👆
+
+        } else {
             $query->where('is_private', false);
         }
 
