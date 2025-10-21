@@ -18,25 +18,47 @@ class RoomApiController extends Controller {
     {
         $user = $request->user();
 
-        // 👇 CARREGUE A RELAÇÃO 'users' AQUI 👇
-        $todasAsSalas = Room::with('users') // <--- ADICIONE ISSO
-        ->withCount('users')
-            ->get();
+        // Cria a query base
+        $query = Room::query();
 
-        // O filtro agora funciona sem N+1 Queries
-        $salasPermitidas = $todasAsSalas->filter(function ($sala) use ($user) {
-            if ($user) {
-                return $user->can('view', $sala);
-            } else {
-                return !$sala->is_private;
-            }
-        });
+        // Se o usuário está logado, aplica o filtro de acesso
+        if ($user) {
+            $userId = $user->id;
+            $query->where(function ($q) use ($userId) {
+                // Mostra salas públicas OU
+                $q->where('is_private', false)
+                    // salas que o usuário criou OU
+                    ->orWhere('created_by', $userId)
+                    // salas das quais o usuário é membro (vai direto na tabela room_user)
+                    ->orWhereHas('users', function ($uq) use ($userId) {
+                        $uq->where('user_id', $userId);
+                    });
+            });
+        }
+        // Se não está logado (visitante), só mostra as públicas
+        else {
+            $query->where('is_private', false);
+        }
 
-        // ✅ Opcional: Carregar creator só para as salas permitidas (mais eficiente)
-        $salasPermitidas->load('creator:id,name');
+        // Carrega as relações necessárias ANTES de executar a query
+        $query->with(['creator:id,name']) // Não precisa 'users' aqui, já filtramos por ele
+        ->withCount('users'); // Contagem ainda é útil
 
-        // Retorna a lista filtrada (values() reseta as chaves do array)
-        return response()->json(['data' => $salasPermitidas->values()]);
+        // Executa a query com paginação (ou ->get() se não precisar paginar)
+        $rooms = $query->latest()->paginate(20);
+        // Ou: $rooms = $query->latest()->get();
+
+        // Retorna a resposta JSON (adaptar se não usar paginação)
+        return response()->json([
+            'data' => $rooms->items(), // Se usar paginate
+            // 'data' => $rooms, // Se usar get()
+            'meta' => [ // Remover se usar get()
+                'current_page' => $rooms->currentPage(),
+                'last_page' => $rooms->lastPage(),
+                'per_page' => $rooms->perPage(),
+                'total' => $rooms->total(),
+            ],
+        ]);
     }
 
     public function show(Request $request, Room $room) {
