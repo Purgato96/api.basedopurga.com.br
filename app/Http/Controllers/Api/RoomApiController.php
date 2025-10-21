@@ -14,51 +14,93 @@ use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 class RoomApiController extends Controller {
     use AuthorizesRequests;
 
-    public function index(Request $request) {
+    public function index(Request $request)
+    {
         $user = $request->user();
-        $query = Room::query();
+        \Log::info("--- RoomApiController@index Start ---"); // Log início
 
+        // Cria a query base
+        $query = Room::query();
+        \Log::info("Base query created.");
+
+        // Se o usuário está logado, aplica o filtro de acesso
         if ($user) {
             $userId = $user->id;
+            \Log::info("User Authenticated", ['userId' => $userId, 'userName' => $user->name]); // Loga ID e nome
+
             $query->where(function ($q) use ($userId) {
-                $q->where('is_private', false)
-                    ->orWhere('created_by', $userId)
-                    ->orWhereHas('users', function ($uq) use ($userId) {
-                        $uq->where('user_id', $userId);
-                    });
+                \Log::info("Applying WHERE clause group...");
+
+                // Condição 1: Sala Pública
+                $q->where('is_private', false);
+                \Log::info(" -> Added condition: is_private = false");
+
+                // Condição 2: Criador é o usuário
+                $q->orWhere('created_by', $userId);
+                \Log::info(" -> Added OR condition: created_by = " . $userId . " (Type: " . gettype($userId) . ")"); // Loga tipo
+
+                // Condição 3: Usuário é membro
+                $q->orWhereHas('users', function ($uq) use ($userId) {
+                    \Log::info(" ---> Inside orWhereHas for users...");
+                    $uq->where('user_id', $userId);
+                    \Log::info(" -----> Added sub-condition: user_id = " . $userId);
+                });
+                \Log::info(" -> Added OR condition: User is member via orWhereHas");
             });
+            \Log::info("Finished applying WHERE clause group.");
 
-            // 👇 ADICIONE ESTAS LINHAS PARA DEBUG 👇
-            \Log::info("User ID: " . $userId); // Loga o ID do usuário
-            \Log::info("SQL Gerada: " . $query->toSql()); // Loga a SQL
-            \Log::info("Bindings: ", $query->getBindings()); // Loga os valores usados na SQL
-            //
-            // Você também pode usar dd() aqui se estiver testando com Postman:
-            // dd($query->toSql(), $query->getBindings());
-            // 👆 FIM DO DEBUG 👆
-
-        } else {
+        }
+        // Se não está logado (visitante)
+        else {
+            \Log::info("User is Guest. Applying WHERE is_private = false");
             $query->where('is_private', false);
         }
 
-        // Carrega as relações necessárias ANTES de executar a query
-        $query->with(['creator:id,name']) // Não precisa 'users' aqui, já filtramos por ele
-        ->withCount('users'); // Contagem ainda é útil
+        // Loga a SQL e Bindings ANTES de adicionar relations/counts
+        \Log::info("SQL after WHERE clauses:", ['sql' => $query->toSql(), 'bindings' => $query->getBindings()]);
 
-        // Executa a query com paginação (ou ->get() se não precisar paginar)
-        $rooms = $query->latest()->paginate(20);
-        // Ou: $rooms = $query->latest()->get();
+        // Carrega relações e contagem
+        $query->with(['creator:id,name'])
+            ->withCount('users');
+        \Log::info("Added with(creator) and withCount(users).");
 
-        // Retorna a resposta JSON (adaptar se não usar paginação)
-        return response()->json([
-            'data' => $rooms->items(), // Se usar paginate
-            // 'data' => $rooms, // Se usar get()
-            'meta' => [ // Remover se usar get()
-                'current_page' => $rooms->currentPage(),
-                'last_page' => $rooms->lastPage(),
-                'per_page' => $rooms->perPage(),
+
+        // Executa a query final
+        try {
+            // Loga a SQL FINAL antes de executar
+            \Log::info("FINAL SQL before execution:", ['sql' => $query->toSql(), 'bindings' => $query->getBindings()]);
+
+            $rooms = $query->latest()->paginate(20);
+
+            \Log::info("Query Executed Successfully. Found rooms:", [
                 'total' => $rooms->total(),
-            ],
+                'items_count' => count($rooms->items()),
+                'current_page' => $rooms->currentPage(),
+            ]); // Loga contagem
+
+            // Se encontrou 0, loga as salas ANTES do filtro (se tivéssemos filtro)
+            if ($rooms->total() === 0 && $user) {
+                $allUserRoomsDirectly = $user->rooms()->pluck('rooms.id')->toArray();
+                $allCreatedRoomsDirectly = $user->createdRooms()->pluck('rooms.id')->toArray();
+                $allPublicRooms = Room::where('is_private', false)->pluck('id')->toArray();
+                \Log::warning("Query returned 0 results. Checking directly:", [
+                    'user_is_member_of_room_ids' => $allUserRoomsDirectly,
+                    'user_created_room_ids' => $allCreatedRoomsDirectly,
+                    'public_room_ids' => $allPublicRooms,
+                ]);
+            }
+
+
+        } catch (\Exception $e) {
+            \Log::error("FATAL ERROR during query execution:", ['message' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            return response()->json(['error' => 'Failed to retrieve rooms'], 500);
+        }
+
+        // Retorna a resposta JSON
+        \Log::info("--- RoomApiController@index End ---"); // Log fim
+        return response()->json([
+            'data' => $rooms->items(),
+            'meta' => [ /* ... meta info ... */ ],
         ]);
     }
 
