@@ -7,6 +7,8 @@ use App\Models\Room;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use PHPOpenSourceSaver\JWTAuth\Facades\JWTAuth; // <-- ADICIONE ESTE IMPORT
+use PHPOpenSourceSaver\JWTAuth\Exceptions\JWTException; // <-- ADICIONE ESTE IMPORT
 
 /**
  * @mixin \Illuminate\Foundation\Auth\Access\AuthorizesRequests
@@ -16,92 +18,77 @@ class RoomApiController extends Controller {
 
     public function index(Request $request)
     {
-        $user = $request->user();
-        \Log::info("--- RoomApiController@index Start ---"); // Log início
+        \Log::info("--- RoomApiController@index Start ---");
 
-        // Cria a query base
+        // Tenta pegar o usuário autenticado pelo Laravel
+        $user = $request->user();
+
+        // 👇 NOVA LÓGICA DE AUTENTICAÇÃO OPCIONAL 👇
+        if (!$user) {
+            \Log::info("User not found via \$request->user(). Trying JWTAuth::parseToken()->authenticate()");
+            try {
+                // Se não encontrou, tenta autenticar via JWT manualmente
+                if ($token = JWTAuth::getToken()) { // Verifica se um token foi enviado
+                    $user = JWTAuth::parseToken()->authenticate(); // Tenta validar e pegar o usuário
+                    if ($user) {
+                        \Log::info("User successfully authenticated via JWT", ['userId' => $user->id]);
+                    } else {
+                        \Log::info("JWT token found but user authentication failed.");
+                    }
+                } else {
+                    \Log::info("No JWT token found in the request.");
+                }
+            } catch (JWTException $e) {
+                // Se o token for inválido ou expirado, $user continua null (tratado como guest)
+                \Log::warning("JWT Exception during optional authentication:", ['message' => $e->getMessage()]);
+                $user = null; // Garante que $user seja null
+            }
+        }
+        // 👆 FIM DA NOVA LÓGICA 👆
+
+
         $query = Room::query();
         \Log::info("Base query created.");
 
-        // Se o usuário está logado, aplica o filtro de acesso
+        // Agora o bloco if ($user) deve funcionar corretamente
         if ($user) {
             $userId = $user->id;
-            \Log::info("User Authenticated", ['userId' => $userId, 'userName' => $user->name]); // Loga ID e nome
+            \Log::info("User Authenticated (ID: {$userId}). Applying authenticated user filters.");
 
             $query->where(function ($q) use ($userId) {
-                \Log::info("Applying WHERE clause group...");
-
-                // Condição 1: Sala Pública
-                $q->where('is_private', false);
-                \Log::info(" -> Added condition: is_private = false");
-
-                // Condição 2: Criador é o usuário
-                $q->orWhere('created_by', $userId);
-                \Log::info(" -> Added OR condition: created_by = " . $userId . " (Type: " . gettype($userId) . ")"); // Loga tipo
-
-                // Condição 3: Usuário é membro
-                $q->orWhereHas('users', function ($uq) use ($userId) {
-                    \Log::info(" ---> Inside orWhereHas for users...");
-                    $uq->where('user_id', $userId);
-                    \Log::info(" -----> Added sub-condition: user_id = " . $userId);
-                });
-                \Log::info(" -> Added OR condition: User is member via orWhereHas");
+                $q->where('is_private', false)
+                    ->orWhere('created_by', $userId)
+                    ->orWhereHas('users', function ($uq) use ($userId) {
+                        $uq->where('user_id', $userId);
+                    });
             });
-            \Log::info("Finished applying WHERE clause group.");
-
         }
-        // Se não está logado (visitante)
+        // Lógica para Guest
         else {
             \Log::info("User is Guest. Applying WHERE is_private = false");
             $query->where('is_private', false);
         }
 
-        // Loga a SQL e Bindings ANTES de adicionar relations/counts
         \Log::info("SQL after WHERE clauses:", ['sql' => $query->toSql(), 'bindings' => $query->getBindings()]);
 
-        // Carrega relações e contagem
         $query->with(['creator:id,name'])
             ->withCount('users');
         \Log::info("Added with(creator) and withCount(users).");
 
-
-        // Executa a query final
         try {
-            // Loga a SQL FINAL antes de executar
             \Log::info("FINAL SQL before execution:", ['sql' => $query->toSql(), 'bindings' => $query->getBindings()]);
-
             $rooms = $query->latest()->paginate(20);
+            \Log::info("Query Executed Successfully. Found rooms:", [ /* ... logs de contagem ... */ ]);
 
-            \Log::info("Query Executed Successfully. Found rooms:", [
-                'total' => $rooms->total(),
-                'items_count' => count($rooms->items()),
-                'current_page' => $rooms->currentPage(),
-            ]); // Loga contagem
-
-            // Se encontrou 0, loga as salas ANTES do filtro (se tivéssemos filtro)
-            if ($rooms->total() === 0 && $user) {
-                $allUserRoomsDirectly = $user->rooms()->pluck('rooms.id')->toArray();
-                $allCreatedRoomsDirectly = $user->createdRooms()->pluck('rooms.id')->toArray();
-                $allPublicRooms = Room::where('is_private', false)->pluck('id')->toArray();
-                \Log::warning("Query returned 0 results. Checking directly:", [
-                    'user_is_member_of_room_ids' => $allUserRoomsDirectly,
-                    'user_created_room_ids' => $allCreatedRoomsDirectly,
-                    'public_room_ids' => $allPublicRooms,
-                ]);
-            }
-
+            // ... (o Log::warning se total === 0) ...
 
         } catch (\Exception $e) {
-            \Log::error("FATAL ERROR during query execution:", ['message' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            \Log::error("FATAL ERROR during query execution:", [/* ... logs de erro ... */]);
             return response()->json(['error' => 'Failed to retrieve rooms'], 500);
         }
 
-        // Retorna a resposta JSON
-        \Log::info("--- RoomApiController@index End ---"); // Log fim
-        return response()->json([
-            'data' => $rooms->items(),
-            'meta' => [ /* ... meta info ... */ ],
-        ]);
+        \Log::info("--- RoomApiController@index End ---");
+        return response()->json([ /* ... resposta JSON ... */ ]);
     }
 
     public function show(Request $request, Room $room) {
