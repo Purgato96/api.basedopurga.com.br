@@ -30,18 +30,26 @@ class RoomPolicy {
         // 3. Se nenhuma das condições acima for atendida, negue o acesso.
         return false;
     }*/
-    public function view(User $user, Room $room): bool
-    {
-        // 1. Se for pública, permite.
+    public function view(User $user, Room $room): bool {
+        \Log::info("--- RoomPolicy@view Check ---", [
+            'userId' => $user->id,
+            'roomId' => $room->id,
+            'roomIsPrivate' => $room->is_private
+        ]);
+
         if (!$room->is_private) {
+            \Log::info("Room is public. Allowing access.");
             return true;
         }
 
-        // 2. Se for privada, PERGUNTA AO BANCO se o usuário é membro.
-        //    Isso ignora qualquer problema com a coleção '$room->users'.
-        return $room->users()->where('user_id', $user->id)->exists(); // <-- MUDANÇA CRUCIAL
+        // Verifica no banco
+        $isMember = $room->users()->where('user_id', $user->id)->exists();
 
+        \Log::info("Room is private. Checking membership via DB exists():", ['isMember' => $isMember]);
+
+        return $isMember; // Retorna o resultado da verificação
     }
+
     /**
      * Determine whether the user can create models.
      */
