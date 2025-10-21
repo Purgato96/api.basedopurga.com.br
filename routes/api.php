@@ -14,43 +14,47 @@ Route::prefix('v1')->name('api.')->group(function () {
     Route::post('/auth/login', [AuthController::class, 'login']);
     Route::post('/auth/register', [AuthController::class, 'register']);
     Route::post('/auth/auto-login', [ChatAutoLoginController::class, 'autoLogin']);
-    Route::get('/rooms', [RoomApiController::class, 'index']);
-    Route::get('/rooms/{room:slug}', [RoomApiController::class, 'show']);
-    Route::get('/rooms/{room:slug}/members', [RoomApiController::class, 'members']);
-    Route::get('/rooms/{room:slug}/messages', [MessageApiController::class, 'index']);
-    Route::get('/rooms/{room:slug}/messages/search', [MessageApiController::class, 'search']);
-    Route::get('/messages/{message}', [MessageApiController::class, 'show']);
+    Route::get('/rooms', [RoomApiController::class, 'index']); // Listagem geral PODE ser pública
 });
 
 Route::prefix('v1')->name('api.')->middleware(['auth:api'])->group(function () {
-    // Protegido
+    // Rotas de Autenticação Protegidas
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::post('/auth/refresh', [AuthController::class, 'refresh']);
     Route::get('/auth/me', [AuthController::class, 'me']);
 
+    // --- ROTAS DE SALA ESPECÍFICA (MOVIMOS PARA CÁ) ---
+    Route::get('/rooms/{room:slug}', [RoomApiController::class, 'show']);          // Requer auth
+    Route::get('/rooms/{room:slug}/members', [RoomApiController::class, 'members']); // Requer auth
+    Route::get('/rooms/{room:slug}/messages', [MessageApiController::class, 'index']); // Requer auth
+    Route::get('/rooms/{room:slug}/messages/search', [MessageApiController::class, 'search']); // Requer auth
+    Route::get('/messages/{message}', [MessageApiController::class, 'show']);      // Requer auth (geralmente)
+
+    // --- ROTAS DE MODIFICAÇÃO DE SALA ---
     Route::post('/rooms', [RoomApiController::class, 'store']);
     Route::put('/rooms/{room:slug}', [RoomApiController::class, 'update']);
     Route::delete('/rooms/{room:slug}', [RoomApiController::class, 'destroy']);
 
+    // --- ROTAS DE AÇÃO EM SALA ---
     Route::post('/rooms/{room:slug}/join', [RoomApiController::class, 'join']);
     Route::post('/rooms/{room:slug}/members', [RoomApiController::class, 'addMember']);
     Route::delete('/rooms/{room:slug}/leave', [RoomApiController::class, 'leave']);
     Route::get('/rooms/private/all', [RoomApiController::class, 'myPrivateRooms']);
 
+    // --- ROTAS DE MENSAGEM ---
     Route::post('/rooms/{room:slug}/messages', [MessageApiController::class, 'store']);
     Route::put('/messages/{message}', [MessageApiController::class, 'update']);
     Route::delete('/messages/{message}', [MessageApiController::class, 'destroy']);
 
+    // --- ROTAS DE CONVERSA PRIVADA ---
     Route::get('/private-conversations', [PrivateConversationController::class, 'index']);
     Route::post('/private-conversations', [PrivateConversationController::class, 'start']);
     Route::get('/private-conversations/{conversation}', [PrivateConversationController::class, 'show']);
     Route::post('/private-conversations/{conversation}/messages', [PrivateMessageController::class, 'store']);
     Route::put('/private-conversations/{conversation}/messages/{message}', [PrivateMessageController::class, 'update']);
     Route::post('/private-conversations/{conversation}/messages/{message}/read', [PrivateMessageController::class, 'markAsRead']);
-});
 
-// Endpoints auxiliares
-Route::prefix('v1')->middleware(['auth:api'])->group(function () {
+    // --- ROTAS DE WEBSOCKET ---
     Route::post('/websocket/auth', [WebSocketsAuthController::class, 'authenticate']);
     Route::get('/websocket/channels', [WebSocketsAuthController::class, 'channels']);
     Route::get('/websocket/test', [WebSocketsAuthController::class, 'test']);
