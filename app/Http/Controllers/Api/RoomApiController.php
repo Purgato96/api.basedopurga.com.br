@@ -7,8 +7,12 @@ use App\Models\Room;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
-use PHPOpenSourceSaver\JWTAuth\Facades\JWTAuth; // <-- ADICIONE ESTE IMPORT
-use PHPOpenSourceSaver\JWTAuth\Exceptions\JWTException; // <-- ADICIONE ESTE IMPORT
+use PHPOpenSourceSaver\JWTAuth\Facades\JWTAuth;
+
+// <-- ADICIONE ESTE IMPORT
+use PHPOpenSourceSaver\JWTAuth\Exceptions\JWTException;
+
+// <-- ADICIONE ESTE IMPORT
 
 /**
  * @mixin \Illuminate\Foundation\Auth\Access\AuthorizesRequests
@@ -16,79 +20,56 @@ use PHPOpenSourceSaver\JWTAuth\Exceptions\JWTException; // <-- ADICIONE ESTE IMP
 class RoomApiController extends Controller {
     use AuthorizesRequests;
 
-    public function index(Request $request)
-    {
-        \Log::info("--- RoomApiController@index Start ---");
-
-        // Tenta pegar o usuário autenticado pelo Laravel
+    public function index(Request $request) {
         $user = $request->user();
-
-        // 👇 NOVA LÓGICA DE AUTENTICAÇÃO OPCIONAL 👇
+        // Tenta autenticar manualmente se $request->user() falhar (código anterior)
         if (!$user) {
-            \Log::info("User not found via \$request->user(). Trying JWTAuth::parseToken()->authenticate()");
             try {
-                // Se não encontrou, tenta autenticar via JWT manualmente
-                if ($token = JWTAuth::getToken()) { // Verifica se um token foi enviado
-                    $user = JWTAuth::parseToken()->authenticate(); // Tenta validar e pegar o usuário
-                    if ($user) {
-                        \Log::info("User successfully authenticated via JWT", ['userId' => $user->id]);
-                    } else {
-                        \Log::info("JWT token found but user authentication failed.");
-                    }
-                } else {
-                    \Log::info("No JWT token found in the request.");
+                if ($token = JWTAuth::getToken()) {
+                    $user = JWTAuth::parseToken()->authenticate();
                 }
             } catch (JWTException $e) {
-                // Se o token for inválido ou expirado, $user continua null (tratado como guest)
-                \Log::warning("JWT Exception during optional authentication:", ['message' => $e->getMessage()]);
-                $user = null; // Garante que $user seja null
+                $user = null;
             }
         }
-        // 👆 FIM DA NOVA LÓGICA 👆
 
+        \Log::info("--- RoomApiController@index Start (orWhereHas ISOLATION TEST) ---");
 
-        $query = Room::query();
-        \Log::info("Base query created.");
+        if (!$user) {
+            \Log::info("User is Guest. Skipping test.");
+            return response()->json(['data_test' => []]); // Retorna vazio para guest
+        }
 
-        // Agora o bloco if ($user) deve funcionar corretamente
-        if ($user) {
-            $userId = $user->id;
-            \Log::info("User Authenticated (ID: {$userId}). Applying authenticated user filters.");
+        $userId = $user->id;
+        \Log::info("User Authenticated for Test", ['userId' => $userId]);
 
-            $query->where(function ($q) use ($userId) {
-                $q->where('is_private', false)
-                    ->orWhere('created_by', $userId)
-                    ->orWhereHas('users', function ($uq) use ($userId) {
-                        $uq->where('user_id', $userId);
-                    });
+        // 👇 TESTE: APENAS A CONDIÇÃO orWhereHas 👇
+        $query = Room::query()
+            ->whereHas('users', function ($uq) use ($userId) {
+                $uq->where('user_id', $userId);
             });
-        }
-        // Lógica para Guest
-        else {
-            \Log::info("User is Guest. Applying WHERE is_private = false");
-            $query->where('is_private', false);
-        }
+        // 👆 FIM DO TESTE 👆
 
-        \Log::info("SQL after WHERE clauses:", ['sql' => $query->toSql(), 'bindings' => $query->getBindings()]);
-
-        $query->with(['creator:id,name'])
-            ->withCount('users');
-        \Log::info("Added with(creator) and withCount(users).");
+        // Loga a SQL e Bindings desta query específica
+        \Log::info("ISOLATION TEST SQL (whereHas only):", ['sql' => $query->toSql(), 'bindings' => $query->getBindings()]);
 
         try {
-            \Log::info("FINAL SQL before execution:", ['sql' => $query->toSql(), 'bindings' => $query->getBindings()]);
-            $rooms = $query->latest()->paginate(20);
-            \Log::info("Query Executed Successfully. Found rooms:", [ /* ... logs de contagem ... */ ]);
+            // Executa a query de teste (usando get() para simplificar)
+            $rooms = $query->get();
 
-            // ... (o Log::warning se total === 0) ...
+            \Log::info("ISOLATION TEST Query Executed. Found rooms:", [
+                'count' => $rooms->count(),
+                'ids' => $rooms->pluck('id')->toArray(), // Pega os IDs das salas encontradas
+            ]);
 
         } catch (\Exception $e) {
-            \Log::error("FATAL ERROR during query execution:", [/* ... logs de erro ... */]);
-            return response()->json(['error' => 'Failed to retrieve rooms'], 500);
+            \Log::error("FATAL ERROR during ISOLATION TEST query:", ['message' => $e->getMessage()]);
+            return response()->json(['error' => 'Failed ISOLATION TEST query'], 500);
         }
 
-        \Log::info("--- RoomApiController@index End ---");
-        return response()->json([ /* ... resposta JSON ... */ ]);
+        \Log::info("--- RoomApiController@index End (orWhereHas ISOLATION TEST) ---");
+        // Retorna o resultado do teste diretamente
+        return response()->json(['data_test_results' => $rooms]);
     }
 
     public function show(Request $request, Room $room) {
