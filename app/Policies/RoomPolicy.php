@@ -31,22 +31,12 @@ class RoomPolicy {
         return false;
     }*/
     public function view(User $user, Room $room): bool {
-        \Log::info("--- RoomPolicy@view Check ---", [
-            'userId' => $user->id,
-            'roomId' => $room->id,
-            'roomIsPrivate' => $room->is_private
-        ]);
-
         if (!$room->is_private) {
-            \Log::info("Room is public. Allowing access.");
             return true;
         }
 
         // Verifica no banco
         $isMember = $room->users()->where('user_id', $user->id)->exists();
-
-        \Log::info("Room is private. Checking membership via DB exists():", ['isMember' => $isMember]);
-
         return $isMember; // Retorna o resultado da verificação
     }
 

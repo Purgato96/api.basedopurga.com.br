@@ -7,21 +7,15 @@ use App\Http\Controllers\Controller;
 use App\Models\Message;
 use App\Models\Room;
 use Illuminate\Http\Request;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 
 class MessageApiController extends Controller {
+    use AuthorizesRequests;
     /**
      * Lista mensagens de uma sala
      */
     public function index(Request $request, Room $room) {
-        $userId = (int)optional($request->user())->id;
-
-        // Usa regra centralizada
-        if (!$room->userCanAccess($userId)) {
-            return response()->json([
-                'error' => 'Acesso negado',
-                'message' => 'Você não tem permissão para ver as mensagens desta sala.'
-            ], 403);
-        }
+        $this->authorize('view', $room);
 
         $request->validate([
             'per_page' => 'sometimes|integer|min:1|max:100',
@@ -84,6 +78,7 @@ class MessageApiController extends Controller {
      * Envia uma nova mensagem
      */
     public function store(Request $request, Room $room) {
+        $this->authorize('view', $room);
         $userId = $request->user()->id;
 
         // Usa regra centralizada: criador OU membro podem enviar
@@ -120,12 +115,7 @@ class MessageApiController extends Controller {
      * Atualiza uma mensagem (apenas o autor)
      */
     public function update(Request $request, Message $message) {
-        if ((int)$message->user_id !== (int)$request->user()->id) {
-            return response()->json([
-                'error' => 'Acesso negado',
-                'message' => 'Você só pode editar suas próprias mensagens.'
-            ], 403);
-        }
+        $this->authorize('update', $message);
 
         $request->validate([
             'content' => 'required|string|max:2000',
@@ -151,12 +141,7 @@ class MessageApiController extends Controller {
      * Remove uma mensagem (apenas o autor)
      */
     public function destroy(Request $request, Message $message) {
-        if ((int)$message->user_id !== (int)$request->user()->id) {
-            return response()->json([
-                'error' => 'Acesso negado',
-                'message' => 'Você só pode deletar suas próprias mensagens.'
-            ], 403);
-        }
+        $this->authorize('delete', $message);
 
         $message->delete();
 
@@ -172,14 +157,7 @@ class MessageApiController extends Controller {
      * Busca mensagens por conteúdo
      */
     public function search(Request $request, Room $room) {
-        $userId = (int)optional($request->user())->id;
-
-        if (!$room->userCanAccess($userId)) {
-            return response()->json([
-                'error' => 'Acesso negado',
-                'message' => 'Você não tem permissão para buscar nesta sala.'
-            ], 403);
-        }
+        $this->authorize('view', $room);
 
         $request->validate([
             'q' => 'required|string|min:3|max:100',

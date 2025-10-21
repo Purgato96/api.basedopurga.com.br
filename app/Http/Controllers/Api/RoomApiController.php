@@ -9,11 +9,7 @@ use Illuminate\Support\Str;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use PHPOpenSourceSaver\JWTAuth\Facades\JWTAuth;
 use Illuminate\Database\Eloquent\Builder;
-
-// <-- ADICIONE ESTE IMPORT
 use PHPOpenSourceSaver\JWTAuth\Exceptions\JWTException;
-
-// <-- ADICIONE ESTE IMPORT
 
 /**
  * @mixin \Illuminate\Foundation\Auth\Access\AuthorizesRequests
@@ -21,17 +17,18 @@ use PHPOpenSourceSaver\JWTAuth\Exceptions\JWTException;
 class RoomApiController extends Controller {
     use AuthorizesRequests;
 
-    public function index(Request $request)
-    {
+    public function index(Request $request) {
         // Tenta autenticar via JWT se $request->user() for null
         $user = $request->user();
         if (!$user) {
             try {
-                if ($token = JWTAuth::getToken()) { $user = JWTAuth::parseToken()->authenticate(); }
-            } catch (JWTException $e) { $user = null; }
+                if ($token = JWTAuth::getToken()) {
+                    $user = JWTAuth::parseToken()->authenticate();
+                }
+            } catch (JWTException $e) {
+                $user = null;
+            }
         }
-
-        \Log::info("--- RoomApiController@index Start (Final Version) ---", ['userId' => $user?->id]);
 
         // Cria a query base
         $query = Room::query();
@@ -39,25 +36,15 @@ class RoomApiController extends Controller {
         // Aplica filtros baseados no usuário
         if ($user) {
             $userId = $user->id;
-            \Log::info("User Authenticated (ID: {$userId}). Applying final query logic.");
-
-            // 👇 LÓGICA SIMPLIFICADA 👇
-            // Seleciona salas onde:
             $query->where('is_private', false) // 1: A sala é pública
             ->orWhere('created_by', $userId) // 2: OU o usuário é o criador
             ->orWhereHas('users', function (Builder $query) use ($userId) { // 3: OU o usuário é membro
                 $query->where('user_id', $userId);
             });
-            // 👆 FIM DA LÓGICA SIMPLIFICADA 👆
 
         } else {
-            \Log::info("User is Guest. Applying WHERE is_private = false");
             $query->where('is_private', false); // Visitantes só veem públicas
         }
-
-        // Loga a SQL gerada por esta lógica
-        \Log::info("FINAL SQL after simplified WHERE:", ['sql' => $query->toSql(), 'bindings' => $query->getBindings()]);
-
         // Carrega relações e contagem
         $query->with(['creator:id,name'])
             ->withCount('users');
@@ -66,21 +53,13 @@ class RoomApiController extends Controller {
             // Executa a query
             $rooms = $query->latest()->paginate(20);
 
-            \Log::info("Final Query Executed. Found rooms:", [
-                'total' => $rooms->total(),
-                'items_count' => count($rooms->items()),
-            ]);
-
         } catch (\Exception $e) {
-            \Log::error("FATAL ERROR during final query execution:", ['message' => $e->getMessage()]);
             return response()->json(['error' => 'Failed to retrieve rooms'], 500);
         }
-
-        \Log::info("--- RoomApiController@index End (Final Version) ---");
         // Retorna a resposta JSON
         return response()->json([
             'data' => $rooms->items(),
-            'meta' => [ /* ... meta info ... */ ],
+            'meta' => [ /* ... meta info ... */],
         ]);
     }
 

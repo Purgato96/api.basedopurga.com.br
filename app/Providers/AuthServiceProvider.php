@@ -2,7 +2,9 @@
 
 namespace App\Providers;
 
+use App\Models\Message;
 use App\Models\Room;
+use App\Policies\MessagePolicy;
 use App\Policies\RoomPolicy;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as BaseAuthServiceProvider;
 
@@ -14,6 +16,7 @@ class AuthServiceProvider extends BaseAuthServiceProvider {
      */
     protected $policies = [
         Room::class => RoomPolicy::class,
+        Message::class => MessagePolicy::class,
     ];
 
     /**
