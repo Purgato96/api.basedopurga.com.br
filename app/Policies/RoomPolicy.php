@@ -16,7 +16,7 @@ class RoomPolicy {
     /**
      * Determine whether the user can view the model.
      */
-    public function view(User $user, Room $room): bool {
+    /*public function view(User $user, Room $room): bool {
         // 1. Se a sala for pública, qualquer um pode ver.
         if (!$room->is_private) {
             return true;
@@ -29,8 +29,19 @@ class RoomPolicy {
 
         // 3. Se nenhuma das condições acima for atendida, negue o acesso.
         return false;
-    }
+    }*/
+    public function view(User $user, Room $room): bool {
+        // 1. Se a sala for pública, permite.
+        if (!$room->is_private) {
+            return true;
+        }
 
+        // 2. Se for privada, verifica se o ID do usuário está na lista de IDs dos membros da sala.
+        //    Certifique-se de que a relação 'users' foi carregada com ->with('users') no controller!
+        return $room->users->contains('id', $user->id); // <-- MUDANÇA AQUI
+
+        // O return false implícito acontece se nenhuma condição for atendida.
+    }
     /**
      * Determine whether the user can create models.
      */
