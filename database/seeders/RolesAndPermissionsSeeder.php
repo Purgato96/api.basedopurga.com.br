@@ -8,50 +8,47 @@ use Spatie\Permission\Models\Permission;
 
 class RolesAndPermissionsSeeder extends Seeder {
     public function run() {
-        // Limpa cache de permissões
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
-        // --- Permissões de Usuário ---
-        $permUser = [
-            'view',
+        // Define o guard padrão para este seeder
+        $guard = 'api'; // <-- GARANTE QUE É 'api'
+
+        // --- Permissões ---
+        $permissions = [
+            'view', // <- Adicionei 'view' se for necessária como permissão explícita
             'send-messages',
             'create-rooms',
             'leave-room',
-        ];
-
-        // --- Permissões de Manager (Moderador) ---
-        $permManager = [
             'delete-any-message',
-        ];
-
-        // --- Permissões de Admin ---
-        $permAdmin = [
             'edit-any-message',
             'delete-any-room',
             'add-member-room',
+            // Adicione outras permissões se necessário (ex: 'edit-messages', 'delete-messages')
+            'edit-messages',
+            'delete-messages',
         ];
 
-        // Cria todas as permissões de uma vez
-        foreach (array_merge($permUser, $permManager, $permAdmin) as $permission) {
-            Permission::firstOrCreate(['name' => $permission]);
+        // Cria permissões COM O GUARD 'api'
+        foreach ($permissions as $permission) {
+            Permission::firstOrCreate(['name' => $permission, 'guard_name' => $guard]); // <-- Adiciona guard_name
         }
 
-        // --- Cria Papéis e Atribui Permissões ---
+        // --- Define quais permissões cada papel (exceto master) terá ---
+        $permUser = ['view', 'send-messages', 'create-rooms', 'leave-room', 'edit-messages', 'delete-messages']; // Usuário pode editar/deletar a *própria* msg
+        $permManager = ['delete-any-message']; // Manager pode deletar qqr msg
+        $permAdmin = ['edit-any-message', 'delete-any-room', 'add-member-room']; // Admin pode mais
 
-        // User: Permissões básicas
-        Role::firstOrCreate(['name' => 'user'])
-            ->syncPermissions($permUser);
+        // --- Cria Papéis COM O GUARD 'api' e Atribui Permissões ---
+        Role::firstOrCreate(['name' => 'user', 'guard_name' => $guard]) // <-- Adiciona guard_name
+        ->syncPermissions(Permission::whereIn('name', $permUser)->where('guard_name', $guard)->get());
 
-        // Manager: Tudo que um User faz + permissões de Manager
-        Role::firstOrCreate(['name' => 'manager'])
-            ->syncPermissions(array_merge($permUser, $permManager));
+        Role::firstOrCreate(['name' => 'manager', 'guard_name' => $guard]) // <-- Adiciona guard_name
+        ->syncPermissions(Permission::whereIn('name', array_merge($permUser, $permManager))->where('guard_name', $guard)->get());
 
-        // Admin: Tudo que um Manager faz + permissões de Admin
-        Role::firstOrCreate(['name' => 'admin'])
-            ->syncPermissions(array_merge($permUser, $permManager, $permAdmin));
+        Role::firstOrCreate(['name' => 'admin', 'guard_name' => $guard]) // <-- Adiciona guard_name
+        ->syncPermissions(Permission::whereIn('name', array_merge($permUser, $permManager, $permAdmin))->where('guard_name', $guard)->get());
 
-        // Master: Pode tudo
-        Role::firstOrCreate(['name' => 'master'])
-            ->syncPermissions(Permission::all());
+        Role::firstOrCreate(['name' => 'master', 'guard_name' => $guard]) // <-- Adiciona guard_name
+        ->syncPermissions(Permission::where('guard_name', $guard)->get()); // Pega todas do guard 'api'
     }
 }
