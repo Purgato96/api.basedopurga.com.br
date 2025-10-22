@@ -58,14 +58,7 @@ class MessageApiController extends Controller {
      */
     public function show(Request $request, Message $message) {
         $room = $message->room;
-        $userId = (int)optional($request->user())->id;
-
-        if (!$room->userCanAccess($userId)) {
-            return response()->json([
-                'error' => 'Acesso negado',
-                'message' => 'Você não tem permissão para ver esta mensagem.'
-            ], 403);
-        }
+        $this->authorize('view', $room);
 
         $message->load('user:id,name', 'room:id,name');
 
@@ -82,7 +75,6 @@ class MessageApiController extends Controller {
 
         // 1. Verifica se o usuário pode ACESSAR a sala (usa RoomPolicy@view)
         $this->authorize('view', $room);
-        dd($user->getAllPermissions()->pluck('name'));
         // 2. Verifica se o usuário tem a PERMISSÃO GERAL de enviar mensagens
         if (!$user->can('send-messages')) {
             // Você pode usar abort() ou retornar uma resposta JSON

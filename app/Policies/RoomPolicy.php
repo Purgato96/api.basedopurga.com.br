@@ -16,28 +16,21 @@ class RoomPolicy {
     /**
      * Determine whether the user can view the model.
      */
-    /*public function view(User $user, Room $room): bool {
-        // 1. Se a sala for pública, qualquer um pode ver.
-        if (!$room->is_private) {
-            return true;
-        }
-
-        // 2. Se for privada, verifique se o usuário é membro.
-        if ($room->users->contains($user)) {
-            return true;
-        }
-
-        // 3. Se nenhuma das condições acima for atendida, negue o acesso.
-        return false;
-    }*/
     public function view(User $user, Room $room): bool {
+        // 👇 ADICIONE ESTA VERIFICAÇÃO PRIMEIRO 👇
+        // 1. Se for Master ou Admin, permite acesso a QUALQUER sala.
+        if ($user->hasRole(['master', 'admin'])) {
+            return true;
+        }
+
+        // 2. Se a sala for pública, permite.
         if (!$room->is_private) {
             return true;
         }
 
-        // Verifica no banco
-        $isMember = $room->users()->where('user_id', $user->id)->exists();
-        return $isMember; // Retorna o resultado da verificação
+        // 3. Se for privada E o usuário não for Master/Admin,
+        //    verifica se ele é membro.
+        return $room->users()->where('user_id', $user->id)->exists();
     }
 
     /**
