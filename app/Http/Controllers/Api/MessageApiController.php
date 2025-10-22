@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Log;
 
 class MessageApiController extends Controller {
     use AuthorizesRequests;
+
     /**
      * Lista mensagens de uma sala
      */
@@ -71,65 +72,19 @@ class MessageApiController extends Controller {
     /**
      * Envia uma nova mensagem
      */
-    /*public function store(Request $request, Room $room) {
-        $user = $request->user(); // Pega o usuário logado
-
-        // 1. Verifica se o usuário pode ACESSAR a sala (usa RoomPolicy@view)
-        $this->authorize('view', $room);
-        // 2. Verifica se o usuário tem a PERMISSÃO GERAL de enviar mensagens
-        if (!$user->can('send-messages')) {
-            // Você pode usar abort() ou retornar uma resposta JSON
-            // abort(403, 'Você não tem permissão para enviar mensagens.');
-            return response()->json(['error' => 'Acesso negado', 'message' => 'Você não tem permissão para enviar mensagens.'], 403);
-        }
-
-        // Se passou nas duas verificações, continua...
-        $request->validate([
-            'content' => 'required|string|max:2000',
-        ]);
-
-        $message = Message::create([
-            'content' => $request->input('content'),
-            'user_id' => $user->id, // Usa o $user que já pegamos
-            'room_id' => $room->id,
-        ]);
-
-        // Carrega relações essenciais para o payload e canal
-        $message->load(['user:id,name', 'room:id,slug']);
-
-        // Dispara broadcast para os outros clientes
-        broadcast(new MessageSent($message))->toOthers();
-
-        return response()->json([
-            'data' => $message,
-            'message' => 'Mensagem enviada com sucesso.'
-        ], 201);
-    }*/
-    public function store(Request $request, Room $room)
-    {
+    public function store(Request $request, Room $room) {
         $user = $request->user();
-        Log::info("--- MessageApiController@store Start ---", ['userId' => $user?->id]);
-
         // 1. Verifica acesso à sala
         try {
             $this->authorize('view', $room);
-            Log::info("Authorization ('view', room) PASSED.");
         } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
-            Log::error("Authorization ('view', room) FAILED.", ['exception' => $e->getMessage()]);
             return response()->json(['error' => 'Acesso negado', 'message' => 'Você não tem permissão para ver esta sala.'], 403);
         }
 
-        // Log detalhado das permissões
-        $permissionsArray = $user->getAllPermissions()->pluck('name')->toArray();
-        Log::info("User permissions according to Spatie:", ['permissions' => $permissionsArray]);
-        Log::info("Checking specifically for 'send-messages' permission...");
-
         // 2. Verifica permissão GERAL de enviar
         if (!$user->can('send-messages')) {
-            Log::warning("PERMISSION CHECK FAILED: User CANNOT 'send-messages'. Returning 403.");
             return response()->json(['error' => 'Acesso negado', 'message' => 'Você não tem permissão para enviar mensagens.'], 403);
         }
-        Log::info("Permission check ('send-messages') PASSED.");
 
         // Validação
         $request->validate([
@@ -148,14 +103,9 @@ class MessageApiController extends Controller {
         // Broadcast
         try {
             broadcast(new MessageSent($message))->toOthers();
-            Log::info("Broadcast event MessageSent dispatched.");
-        } catch(\Exception $e) {
-            Log::error("Error broadcasting MessageSent event:", ['error' => $e->getMessage()]);
-            // Considerar se deve falhar a requisição aqui ou apenas logar
+        } catch (\Exception $e) {
         }
 
-
-        Log::info("--- MessageApiController@store End ---");
         return response()->json([
             'data' => $message,
             'message' => 'Mensagem enviada com sucesso.'
