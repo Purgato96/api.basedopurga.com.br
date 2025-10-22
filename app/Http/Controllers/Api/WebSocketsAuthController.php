@@ -13,13 +13,11 @@ use App\Models\Room;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
-class WebSocketsAuthController extends Controller
-{
+class WebSocketsAuthController extends Controller {
     /**
      * Autentica usuário para canais privados do WebSocket
      */
-    public function authenticate(Request $request)
-    {
+    public function authenticate(Request $request) {
         $request->validate([
             'socket_id' => 'required|string',
             'channel_name' => 'required|string',
@@ -119,8 +117,7 @@ class WebSocketsAuthController extends Controller
     /**
      * Lista canais disponíveis para o usuário
      */
-    public function channels(Request $request)
-    {
+    public function channels(Request $request) {
         $user = $request->user();
 
         $rooms = $user->rooms()->select('id', 'name', 'is_private')->get();
@@ -152,8 +149,7 @@ class WebSocketsAuthController extends Controller
     /**
      * Testa conexão WebSocket
      */
-    public function test(Request $request)
-    {
+    public function test(Request $request) {
         $user = $request->user();
 
         return response()->json([

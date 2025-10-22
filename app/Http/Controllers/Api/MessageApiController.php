@@ -78,24 +78,26 @@ class MessageApiController extends Controller {
      * Envia uma nova mensagem
      */
     public function store(Request $request, Room $room) {
-        $this->authorize('view', $room);
-        $userId = $request->user()->id;
+        $user = $request->user(); // Pega o usuário logado
 
-        // Usa regra centralizada: criador OU membro podem enviar
-        if (!$room->userCanAccess($userId)) {
-            return response()->json([
-                'error' => 'Acesso negado',
-                'message' => 'Você não tem permissão para enviar mensagens nesta sala.'
-            ], 403);
+        // 1. Verifica se o usuário pode ACESSAR a sala (usa RoomPolicy@view)
+        $this->authorize('view', $room);
+
+        // 2. Verifica se o usuário tem a PERMISSÃO GERAL de enviar mensagens
+        if (!$user->can('send-messages')) {
+            // Você pode usar abort() ou retornar uma resposta JSON
+            // abort(403, 'Você não tem permissão para enviar mensagens.');
+            return response()->json(['error' => 'Acesso negado', 'message' => 'Você não tem permissão para enviar mensagens.'], 403);
         }
 
+        // Se passou nas duas verificações, continua...
         $request->validate([
             'content' => 'required|string|max:2000',
         ]);
 
         $message = Message::create([
             'content' => $request->input('content'),
-            'user_id' => $userId,
+            'user_id' => $user->id, // Usa o $user que já pegamos
             'room_id' => $room->id,
         ]);
 
