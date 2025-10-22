@@ -70,7 +70,7 @@ class MessageApiController extends Controller {
     /**
      * Envia uma nova mensagem
      */
-    public function store(Request $request, Room $room) {
+    /*public function store(Request $request, Room $room) {
         $user = $request->user(); // Pega o usuário logado
 
         // 1. Verifica se o usuário pode ACESSAR a sala (usa RoomPolicy@view)
@@ -103,6 +103,35 @@ class MessageApiController extends Controller {
             'data' => $message,
             'message' => 'Mensagem enviada com sucesso.'
         ], 201);
+    }*/
+    public function store(Request $request, Room $room) {
+        $user = $request->user();
+        Log::info("--- MessageApiController@store Start ---", ['userId' => $user?->id]); // Log início
+
+        // 1. Verifica acesso à sala
+        try {
+            $this->authorize('view', $room);
+            Log::info("Authorization ('view', room) PASSED."); // Log sucesso
+        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
+            Log::error("Authorization ('view', room) FAILED.", ['exception' => $e->getMessage()]); // Log falha
+            return response()->json(['error' => 'Acesso negado', 'message' => 'Você não tem permissão para ver esta sala.'], 403);
+        }
+
+        // 👇 LOG DETALHADO DAS PERMISSÕES 👇
+        $permissionsArray = $user->getAllPermissions()->pluck('name')->toArray();
+        Log::info("User permissions according to Spatie:", ['permissions' => $permissionsArray]);
+        Log::info("Checking specifically for 'send-messages' permission...");
+        // 👆 FIM DO LOG DETALHADO 👆
+
+        // 2. Verifica permissão GERAL de enviar
+        if (!$user->can('send-messages')) {
+            Log::warning("PERMISSION CHECK FAILED: User CANNOT 'send-messages'. Returning 403."); // Log específico da falha
+            return response()->json(['error' => 'Acesso negado', 'message' => 'Você não tem permissão para enviar mensagens.'], 403);
+        }
+        Log::info("Permission check ('send-messages') PASSED."); // Log sucesso
+
+        // ... (resto do código store: validate, create, broadcast, return) ...
+        Log::info("--- MessageApiController@store End ---"); // Log fim
     }
 
     /**
