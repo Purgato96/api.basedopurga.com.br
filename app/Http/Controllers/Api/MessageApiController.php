@@ -82,7 +82,7 @@ class MessageApiController extends Controller {
 
         // 1. Verifica se o usuário pode ACESSAR a sala (usa RoomPolicy@view)
         $this->authorize('view', $room);
-
+        dd($user->getAllPermissions()->pluck('name'));
         // 2. Verifica se o usuário tem a PERMISSÃO GERAL de enviar mensagens
         if (!$user->can('send-messages')) {
             // Você pode usar abort() ou retornar uma resposta JSON
