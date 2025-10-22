@@ -8,6 +8,7 @@ use App\Models\Message;
 use App\Models\Room;
 use Illuminate\Http\Request;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Support\Facades\Log;
 
 class MessageApiController extends Controller {
     use AuthorizesRequests;
@@ -104,34 +105,61 @@ class MessageApiController extends Controller {
             'message' => 'Mensagem enviada com sucesso.'
         ], 201);
     }*/
-    public function store(Request $request, Room $room) {
+    public function store(Request $request, Room $room)
+    {
         $user = $request->user();
-        Log::info("--- MessageApiController@store Start ---", ['userId' => $user?->id]); // Log início
+        Log::info("--- MessageApiController@store Start ---", ['userId' => $user?->id]);
 
         // 1. Verifica acesso à sala
         try {
             $this->authorize('view', $room);
-            Log::info("Authorization ('view', room) PASSED."); // Log sucesso
+            Log::info("Authorization ('view', room) PASSED.");
         } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
-            Log::error("Authorization ('view', room) FAILED.", ['exception' => $e->getMessage()]); // Log falha
+            Log::error("Authorization ('view', room) FAILED.", ['exception' => $e->getMessage()]);
             return response()->json(['error' => 'Acesso negado', 'message' => 'Você não tem permissão para ver esta sala.'], 403);
         }
 
-        // 👇 LOG DETALHADO DAS PERMISSÕES 👇
+        // Log detalhado das permissões
         $permissionsArray = $user->getAllPermissions()->pluck('name')->toArray();
         Log::info("User permissions according to Spatie:", ['permissions' => $permissionsArray]);
         Log::info("Checking specifically for 'send-messages' permission...");
-        // 👆 FIM DO LOG DETALHADO 👆
 
         // 2. Verifica permissão GERAL de enviar
         if (!$user->can('send-messages')) {
-            Log::warning("PERMISSION CHECK FAILED: User CANNOT 'send-messages'. Returning 403."); // Log específico da falha
+            Log::warning("PERMISSION CHECK FAILED: User CANNOT 'send-messages'. Returning 403.");
             return response()->json(['error' => 'Acesso negado', 'message' => 'Você não tem permissão para enviar mensagens.'], 403);
         }
-        Log::info("Permission check ('send-messages') PASSED."); // Log sucesso
+        Log::info("Permission check ('send-messages') PASSED.");
 
-        // ... (resto do código store: validate, create, broadcast, return) ...
-        Log::info("--- MessageApiController@store End ---"); // Log fim
+        // Validação
+        $request->validate([
+            'content' => 'required|string|max:2000',
+        ]);
+
+        // Criação da Mensagem
+        $message = Message::create([
+            'content' => $request->input('content'),
+            'user_id' => $user->id,
+            'room_id' => $room->id,
+        ]);
+
+        $message->load(['user:id,name', 'room:id,slug']);
+
+        // Broadcast
+        try {
+            broadcast(new MessageSent($message))->toOthers();
+            Log::info("Broadcast event MessageSent dispatched.");
+        } catch(\Exception $e) {
+            Log::error("Error broadcasting MessageSent event:", ['error' => $e->getMessage()]);
+            // Considerar se deve falhar a requisição aqui ou apenas logar
+        }
+
+
+        Log::info("--- MessageApiController@store End ---");
+        return response()->json([
+            'data' => $message,
+            'message' => 'Mensagem enviada com sucesso.'
+        ], 201);
     }
 
     /**
