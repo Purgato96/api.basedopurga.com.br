@@ -59,7 +59,13 @@ class ChatAutoLoginController extends Controller
 
 
             // Retorna a resposta
-            Log::info("ChatAutoLogin: Sucesso. Retornando JSON.");
+            $responseData = [
+                'success' => true,
+                'message' => 'Auto-login realizado com sucesso.',
+                'token' => $token,
+                'data' => [ /* ... user, room, etc ... */ ],
+            ];
+            Log::info("ChatAutoLogin: Dados FINAIS a serem retornados como JSON:", $responseData);
             return response()->json([ /* ... sua resposta JSON ... */ ]);
 
         } catch (Exception $e) {
