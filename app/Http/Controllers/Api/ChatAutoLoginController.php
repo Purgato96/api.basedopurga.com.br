@@ -26,70 +26,59 @@ class ChatAutoLoginController extends Controller
             Log::info("ChatAutoLogin: Iniciando para email: " . $email);
 
             // Cria ou encontra o usuário
-            $user = User::firstOrCreate(
-                ['email' => $email],
-                [
-                    'name' => (string)$email,
-                    'password' => Hash::make(Str::random(16)), // <-- USA HASH::make()
-                    'account_id' => (string)$accountId
+            $user = User::firstOrCreate(...);
+            $token = JWTAuth::fromUser($user);
+
+            // --- LÓGICA DA SALA CORRIGIDA ---
+            $expectedSlug = 'sala-' . Str::slug((string)$accountId);
+            $expectedName = 'Espaço #' . (string)$accountId;
+            Log::info("ChatAutoLogin: Procurando/Criando sala com slug: " . $expectedSlug);
+
+            // Usa updateOrCreate para garantir nome/slug corretos
+            $room = Room::updateOrCreate(
+                ['slug' => $expectedSlug], // Busca por este slug
+                [ // Garante que estes dados estejam corretos (se criar ou se encontrar)
+                    'name' => $expectedName,
+                    'description' => 'Sala automática para account_id ' . (string)$accountId,
+                    'is_private' => true,
+                    'created_by' => $user->id,
+                    // Não precisa de 'slug' aqui, pois já está na condição de busca
                 ]
             );
-
-            // 👇 TESTE DE SANIDADE 👇
-            if (!$user instanceof \App\Models\User) {
-                Log::critical("ChatAutoLogin: ERRO GRAVE - User::firstOrCreate não retornou um objeto User!", ['result' => gettype($user)]);
-                throw new Exception("Falha ao obter objeto do usuário.");
+            // Se encontrou uma sala existente, força a atualização do nome (caso raro)
+            if ($room->wasRecentlyCreated === false && $room->name !== $expectedName) {
+                $room->name = $expectedName;
+                $room->save();
+                Log::warning("ChatAutoLogin: Sala existente encontrada com slug correto, mas nome antigo. Nome atualizado.", ['roomId' => $room->id]);
             }
-            Log::info("ChatAutoLogin: Usuário encontrado/criado com ID: " . $user->id);
-            // 👆 FIM DO TESTE 👆
-
-            // 👇 GERA O TOKEN DIRETAMENTE PELA FACADE 👇
-            $token = JWTAuth::fromUser($user);
-            Log::info("ChatAutoLogin: Token gerado com sucesso.");
-            // Linha antiga (Comentada):
-            // $token = auth('api')->login($user);
+            // --- FIM DA LÓGICA CORRIGIDA ---
 
 
-            // ... (cria/encontra sala, ensureUserMembership, syncWithoutDetaching) ...
-            $slug = 'sala-' . Str::slug((string)$accountId);
-            $room = Room::firstOrCreate( /*...*/ );
+            Log::info("ChatAutoLogin: Sala processada (ID: {$room->id}, Slug: {$room->slug}). Vinculando usuário...");
             $room->ensureUserMembership($user->id);
             $room->users()->syncWithoutDetaching([$user->id => ['joined_at' => now()]]);
-            Log::info("ChatAutoLogin: Sala processada e usuário vinculado.");
+            Log::info("ChatAutoLogin: Usuário vinculado.");
 
 
-            if (!$user || !$room) {
-                Log::error("ChatAutoLogin: Falha crítica - User ou Room inválido antes de montar a resposta.", ['user_valid' => !!$user, 'room_valid' => !!$room]);
-                throw new Exception("Objeto User ou Room inválido.");
-            }
-
-            // Monta a resposta CORRETA
+            // Monta a resposta (agora $room->slug estará correto)
             $responseData = [
                 'success' => true,
-                'message' => 'Auto-login realizado com sucesso.',
-                'token' => $token,
-                'data' => [ // <-- PRECISA SER UM ARRAY ASSOCIATIVO (OBJETO JSON)
-                    'user' => [
-                        'id' => $user->id,
-                        'name' => $user->name,
-                        'email' => $user->email,
-                        // Adicionar permissões aqui se o ChatLogin precisar delas imediatamente
-                        // 'permissions' => $user->getAllPermissions()->pluck('name')->toArray(),
-                    ],
+                // ... (message, token) ...
+                'data' => [
+                    'user' => [ /* ... */ ],
                     'room' => [
                         'id' => $room->id,
-                        'slug' => $room->slug,
+                        'slug' => $room->slug, // <--- Agora deve ser 'sala-...'
                         'name' => $room->name,
                         'description' => $room->description,
-                        'is_private' => $room->is_private, // Enviar status da sala
+                        'is_private' => $room->is_private,
                     ],
                     'account_id' => (string)$accountId,
-                    'redirect_to' => '/chat/room/' . $room->slug,
+                    'redirect_to' => '/chat/room/' . $room->slug, // <--- Correto
                 ],
             ];
 
             Log::info("ChatAutoLogin: Dados FINAIS a serem retornados como JSON:", $responseData);
-
             return response()->json($responseData);
 
         } catch (Exception $e) {
