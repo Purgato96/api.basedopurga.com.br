@@ -31,37 +31,22 @@ class ChatAutoLoginController extends Controller {
         }
 
         try {
-            // Cria ou encontra o usuário
-            $user = User::firstOrCreate(
-                ['email' => $email],
-                [
-                    'name' => (string)$email,
-                    'password' => bcrypt(Str::random(16)),
-                    'account_id' => (string)$accountId
-                ]
-            );
-
-            // Cria token JWT sem expiração
+            // ... (cria usuário, cria token, cria sala) ...
+            $user = User::firstOrCreate(...);
             $token = auth('api')->login($user);
-
-            // Slug da sala baseado no account_id
             $slug = 'sala-' . Str::slug((string)$accountId);
+            $room = Room::firstOrCreate(...);
 
-            // Cria ou encontra a sala
-            $room = Room::firstOrCreate(
-                ['slug' => $slug],
-                [
-                    'name' => 'Espaço #' . (string)$accountId,
-                    'description' => 'Sala automática para account_id ' . (string)$accountId,
-                    'is_private' => true,
-                    'created_by' => $user->id,
-                ]
-            );
 
-            // Garante que o criador SEMPRE esteja na sala
-            $room->ensureCreatorMembership();
+            // 👇 CORREÇÃO AQUI 👇
+            // Garante que o criador e o usuário atual (que é o mesmo neste caso) estejam na sala
+            $room->ensureUserMembership($user->id); // Usa o método correto e passa o ID
 
-            // Garante que o usuário atual também esteja vinculado
+            // Linha antiga (REMOVER):
+            // $room->ensureCreatorMembership();
+
+            // O syncWithoutDetaching abaixo talvez seja redundante se ensureUserMembership já faz isso,
+            // mas não causa erro deixá-lo por segurança.
             $room->users()->syncWithoutDetaching([
                 $user->id => ['joined_at' => now()]
             ]);
@@ -87,10 +72,13 @@ class ChatAutoLoginController extends Controller {
                 ],
             ]);
         } catch (Exception $e) {
+            // Loga o erro real antes de retornar a resposta genérica
+            \Log::error('Erro no ChatAutoLoginController@autoLogin: ' . $e->getMessage(), ['exception' => $e]); // <-- ADICIONA LOG DETALHADO AQUI
+
             return response()->json([
                 'success' => false,
                 'message' => 'Erro no auto-login.',
-                'error' => $e->getMessage(),
+                'error' => $e->getMessage(), // Opcional: remover $e->getMessage() em produção
             ], 500);
         }
     }
