@@ -58,15 +58,39 @@ class ChatAutoLoginController extends Controller
             Log::info("ChatAutoLogin: Sala processada e usuário vinculado.");
 
 
-            // Retorna a resposta
+            if (!$user || !$room) {
+                Log::error("ChatAutoLogin: Falha crítica - User ou Room inválido antes de montar a resposta.", ['user_valid' => !!$user, 'room_valid' => !!$room]);
+                throw new Exception("Objeto User ou Room inválido.");
+            }
+
+            // Monta a resposta CORRETA
             $responseData = [
                 'success' => true,
                 'message' => 'Auto-login realizado com sucesso.',
                 'token' => $token,
-                'data' => [ /* ... user, room, etc ... */ ],
+                'data' => [ // <-- PRECISA SER UM ARRAY ASSOCIATIVO (OBJETO JSON)
+                    'user' => [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        // Adicionar permissões aqui se o ChatLogin precisar delas imediatamente
+                        // 'permissions' => $user->getAllPermissions()->pluck('name')->toArray(),
+                    ],
+                    'room' => [
+                        'id' => $room->id,
+                        'slug' => $room->slug,
+                        'name' => $room->name,
+                        'description' => $room->description,
+                        'is_private' => $room->is_private, // Enviar status da sala
+                    ],
+                    'account_id' => (string)$accountId,
+                    'redirect_to' => '/chat/room/' . $room->slug,
+                ],
             ];
+
             Log::info("ChatAutoLogin: Dados FINAIS a serem retornados como JSON:", $responseData);
-            return response()->json([ /* ... sua resposta JSON ... */ ]);
+
+            return response()->json($responseData);
 
         } catch (Exception $e) {
             Log::error('Erro CRÍTICO no ChatAutoLoginController@autoLogin: ' . $e->getMessage(), [
