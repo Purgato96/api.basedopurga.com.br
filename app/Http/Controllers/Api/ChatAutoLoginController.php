@@ -32,7 +32,6 @@ class ChatAutoLoginController extends Controller
             // --- LÓGICA DA SALA CORRIGIDA ---
             $expectedSlug = 'sala-' . Str::slug((string)$accountId);
             $expectedName = 'Espaço #' . (string)$accountId;
-            Log::info("ChatAutoLogin: Procurando/Criando sala com slug: " . $expectedSlug);
 
             // Usa updateOrCreate para garantir nome/slug corretos
             $room = Room::updateOrCreate(
@@ -59,22 +58,27 @@ class ChatAutoLoginController extends Controller
             $room->users()->syncWithoutDetaching([$user->id => ['joined_at' => now()]]);
             Log::info("ChatAutoLogin: Usuário vinculado.");
 
-
-            // Monta a resposta (agora $room->slug estará correto)
+            $user->load('roles', 'permissions');
+            $permissions = $user->getAllPermissions()->pluck('name');
             $responseData = [
                 'success' => true,
-                // ... (message, token) ...
+                'message' => 'Auto-login realizado com sucesso.',
+                'token' => $token,
                 'data' => [
-                    'user' => [ /* ... */ ],
+                    'user' => [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'account_id' => $user->account_id, // Inclui account_id
+                        'permissions' => $permissions, // Inclui permissões
+                    ],
                     'room' => [
                         'id' => $room->id,
-                        'slug' => $room->slug, // <--- Agora deve ser 'sala-...'
+                        'slug' => $room->slug, // Slug da sala específica
                         'name' => $room->name,
                         'description' => $room->description,
                         'is_private' => $room->is_private,
                     ],
-                    'account_id' => (string)$accountId,
-                    'redirect_to' => '/chat/room/' . $room->slug, // <--- Correto
                 ],
             ];
 
