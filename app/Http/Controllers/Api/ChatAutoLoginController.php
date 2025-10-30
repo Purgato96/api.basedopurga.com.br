@@ -11,14 +11,13 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use PHPOpenSourceSaver\JWTAuth\Facades\JWTAuth;
+use Spatie\Permission\Models\Role;
+use Spatie\Permission\PermissionRegistrar;
+
+// 👈 1. IMPORTAR O REGISTRAR
 
 class ChatAutoLoginController extends Controller {
-    /**
-     * Auto login para integração com ChatRace
-     * POST /api/v1/auth/auto-login
-     */
     public function autoLogin(Request $request) {
-        // Validação completa
         $request->validate([
             'email' => 'required|email',
             'account_id' => 'required|string'
@@ -27,47 +26,63 @@ class ChatAutoLoginController extends Controller {
         $email = $request->string('email');
         $accountId = $request->string('account_id');
 
-        // Verificação de placeholders
         if (Str::startsWith($email, '{{') || Str::startsWith($accountId, '{{')) {
-            Log::warning('ChatAutoLogin: Recebido com parâmetros de placeholder não substituídos.', ['email' => $email, 'account_id' => $accountId]);
-            return response()->json([
-                'success' => false,
-                'message' => 'Parâmetros de substituição inválidos.'
-            ], 400);
+            Log::warning('ChatAutoLogin: Recebido com parâmetros de placeholder.', ['email' => $email, 'account_id' => $accountId]);
+            return response()->json(['success' => false, 'message' => 'Parâmetros de substituição inválidos.'], 400);
         }
 
         try {
             Log::info("ChatAutoLogin: Iniciando para email: " . $email);
 
-            // --- CORREÇÃO 1: Sintaxe completa do firstOrCreate ---
+            // Cria ou encontra o usuário
             $user = User::firstOrCreate(
                 ['email' => $email], // Condições para ENCONTRAR
-                [                   // Dados para CRIAR se não encontrar
-                    'name' => (string)$email, // Nome padrão (pode ser atualizado depois)
-                    'password' => Hash::make(Str::random(16)), // Senha aleatória segura
+                [                   // Dados para CRIAR
+                    'name' => (string)$email,
+                    'password' => Hash::make(Str::random(16)),
                     'account_id' => (string)$accountId
                 ]
             );
 
-            if (!$user instanceof \App\Models\User) {
-                Log::critical("ChatAutoLogin: ERRO GRAVE - User::firstOrCreate não retornou um objeto User!", ['result' => gettype($user)]);
-                throw new Exception("Falha ao obter objeto do usuário.");
+            // 👈 2. LÓGICA DE ATRIBUIÇÃO DE PAPEL À PROVA DE FALHAS
+            $guard = 'api';
+            $userRoleName = 'user'; // O papel que queremos atribuir
+
+            // Se o usuário foi recém-criado OU não tem nenhum papel 'api', atribui o papel 'user'
+            if ($user->wasRecentlyCreated || $user->roles()->where('guard_name', $guard)->count() === 0) {
+
+                if ($user->wasRecentlyCreated) {
+                    Log::info("ChatAutoLogin: Usuário recém-criado (ID: {$user->id}). Atribuindo papel...");
+                } else {
+                    Log::warning("ChatAutoLogin: Usuário existente (ID: {$user->id}) não tem papel 'api'. Atribuindo 'user'...");
+                }
+
+                // 👇 A "MÁGICA" PARA EVITAR CACHE 👇
+                // Limpa o cache do Spatie ANTES de tentar buscar o papel
+                app()[PermissionRegistrar::class]->forgetCachedPermissions();
+
+                $userRole = Role::findByName($userRoleName, $guard); // Busca o papel 'user' do guard 'api'
+
+                if ($userRole) {
+                    $user->assignRole($userRole); // Atribui o papel
+                    Log::info("ChatAutoLogin: Papel '{$userRoleName}' (guard 'api') atribuído com sucesso.");
+                } else {
+                    Log::error("ChatAutoLogin: FALHA AO ATRIBUIR PAPEL - Papel '{$userRoleName}' (guard 'api') não encontrado no DB.");
+                }
+            } else {
+                Log::info("ChatAutoLogin: Usuário existente (ID: {$user->id}) já tem papéis.", ['roles' => $user->getRoleNames()]);
             }
-            Log::info("ChatAutoLogin: Usuário encontrado/criado com ID: " . $user->id);
+            // 👆 FIM DA ATRIBUIÇÃO DE PAPEL
 
-            // Gera o token diretamente
             $token = JWTAuth::fromUser($user);
-            Log::info("ChatAutoLogin: Token gerado com sucesso.");
+            Log::info("ChatAutoLogin: Token gerado.");
 
-            // --- LÓGICA DA SALA CORRIGIDA ---
+            // Lógica da Sala (updateOrCreate)
             $expectedSlug = 'sala-' . Str::slug((string)$accountId);
             $expectedName = 'Espaço #' . (string)$accountId;
-            Log::info("ChatAutoLogin: Procurando/Criando sala com slug: " . $expectedSlug);
-
-            // --- CORREÇÃO 2: Sintaxe completa do updateOrCreate ---
             $room = Room::updateOrCreate(
-                ['slug' => $expectedSlug], // Busca por este slug
-                [ // Garante que estes dados estejam corretos
+                ['slug' => $expectedSlug],
+                [
                     'name' => $expectedName,
                     'description' => 'Sala automática para account_id ' . (string)$accountId,
                     'is_private' => true,
@@ -75,23 +90,16 @@ class ChatAutoLoginController extends Controller {
                 ]
             );
 
-            // Se encontrou uma sala existente e o nome é diferente, atualiza.
-            if ($room->wasRecentlyCreated === false && $room->name !== $expectedName) {
-                $room->name = $expectedName;
-                $room->save();
-                Log::warning("ChatAutoLogin: Sala existente encontrada com slug, nome atualizado.", ['roomId' => $room->id]);
-            }
-            // --- FIM DA LÓGICA CORRIGIDA ---
-
-            Log::info("ChatAutoLogin: Sala processada (ID: {$room->id}, Slug: {$room->slug}). Vinculando usuário...");
-            $room->ensureUserMembership($user->id); // Garante que criador e usuário estão na sala
+            Log::info("ChatAutoLogin: Sala processada. Vinculando usuário...");
+            $room->ensureUserMembership($user->id);
             Log::info("ChatAutoLogin: Usuário vinculado.");
 
-            // Carrega permissões para incluir na resposta
-            $user->load('roles', 'permissions');
+            // Carrega permissões (agora o usuário terá!)
+            $user->forgetCachedPermissions(); // Limpa o cache DE NOVO para ler as permissões recém-atribuídas
             $permissions = $user->getAllPermissions()->pluck('name');
+            Log::info("ChatAutoLogin: Permissões carregadas para resposta:", $permissions->toArray());
 
-            // Monta a resposta CORRETA
+            // Monta a resposta
             $responseData = [
                 'success' => true,
                 'message' => 'Auto-login realizado com sucesso.',
@@ -102,7 +110,7 @@ class ChatAutoLoginController extends Controller {
                         'name' => $user->name,
                         'email' => $user->email,
                         'account_id' => $user->account_id,
-                        'permissions' => $permissions,
+                        'permissions' => $permissions, // Agora terá as permissões de 'user'
                     ],
                     'room' => [
                         'id' => $room->id,
@@ -119,15 +127,10 @@ class ChatAutoLoginController extends Controller {
 
         } catch (Exception $e) {
             Log::error('Erro CRÍTICO no ChatAutoLoginController@autoLogin: ' . $e->getMessage(), [
-                'email' => $email,
-                'accountId' => $accountId,
-                'exception_trace' => $e->getTraceAsString()
+                'email' => $email, 'accountId' => $accountId, 'exception_trace' => $e->getTraceAsString()
             ]);
-            // --- CORREÇÃO 3: Resposta de erro 500 ---
             return response()->json([
-                'success' => false,
-                'message' => 'Erro interno no servidor durante o auto-login.',
-                'error' => $e->getMessage() // Enviar a mensagem de erro real para depuração
+                'success' => false, 'message' => 'Erro interno no servidor durante o auto-login.', 'error' => $e->getMessage()
             ], 500);
         }
     }
