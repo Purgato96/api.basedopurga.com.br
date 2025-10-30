@@ -12,14 +12,12 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use PHPOpenSourceSaver\JWTAuth\Facades\JWTAuth;
 
-class ChatAutoLoginController extends Controller
-{
+class ChatAutoLoginController extends Controller {
     /**
      * Auto login para integração com ChatRace
      * POST /api/v1/auth/auto-login
      */
-    public function autoLogin(Request $request)
-    {
+    public function autoLogin(Request $request) {
         // Validação completa
         $request->validate([
             'email' => 'required|email',
@@ -45,8 +43,8 @@ class ChatAutoLoginController extends Controller
             $user = User::firstOrCreate(
                 ['email' => $email], // Condições para ENCONTRAR
                 [                   // Dados para CRIAR se não encontrar
-                    'name'       => (string)$email, // Nome padrão (pode ser atualizado depois)
-                    'password'   => Hash::make(Str::random(16)), // Senha aleatória segura
+                    'name' => (string)$email, // Nome padrão (pode ser atualizado depois)
+                    'password' => Hash::make(Str::random(16)), // Senha aleatória segura
                     'account_id' => (string)$accountId
                 ]
             );
