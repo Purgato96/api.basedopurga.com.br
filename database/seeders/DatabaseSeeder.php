@@ -40,14 +40,14 @@ class DatabaseSeeder extends Seeder {
             ]
         )->assignRole($masterRole); // Atribui o papel 'master'
 
-        User::firstOrCreate(
+        /*User::firstOrCreate(
             ['email' => 'm.purgato@interacti.com.br'],
             [
                 'name' => 'Purgato InterACTI', // Nome para o usuário do Interacti
                 'password' => Hash::make('12345678'), // Mude sua senha
                 'account_id' => '1541936' // Pré-define o account_id
             ]
-        )->assignRole($masterRole); // Atribui o papel 'master'
+        )->assignRole($masterRole); // Atribui o papel 'master'*/
 
         Log::info("DatabaseSeeder: Usuários 'master' criados e papéis atribuídos com sucesso.");
     }
